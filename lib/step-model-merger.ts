@@ -16,7 +16,6 @@ import {
   transformPoint,
   rotateVector,
 } from "./step-model-merger/vector-utils"
-import { readStepFile } from "./step-model-merger/read-step-file"
 import type {
   CadComponent,
   PcbComponent,
@@ -36,7 +35,9 @@ export async function mergeExternalStepModels(
   const { repo, circuitJson, boardThickness } = options
   const cadComponents = (circuitJson as CadComponent[]).filter(
     (item) =>
-      item?.type === "cad_component" && typeof item.model_step_url === "string",
+      item?.type === "cad_component" &&
+      (typeof item.model_step_content === "string" ||
+        typeof item.model_step_url === "string"),
   )
 
   const pcbComponentMap = new Map<string, PcbComponent>()
@@ -52,10 +53,29 @@ export async function mergeExternalStepModels(
 
   for (const component of cadComponents) {
     const componentId = component.cad_component_id ?? ""
-    const stepUrl = component.model_step_url!
 
     try {
-      const stepText = await readStepFile(stepUrl)
+      // Use model_step_content if provided, otherwise fetch from URL
+      let stepText: string
+      if (component.model_step_content) {
+        stepText = component.model_step_content
+      } else if (component.model_step_url) {
+        // Only HTTP(S) URLs are supported - file paths must be pre-loaded as model_step_content
+        const url = component.model_step_url
+        if (!/^https?:\/\//i.test(url)) {
+          throw new Error(
+            `File paths are not supported. Use model_step_content to provide pre-loaded STEP content, or use an HTTP(S) URL.`,
+          )
+        }
+        const res = await fetch(url)
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} ${res.statusText}`)
+        }
+        stepText = await res.text()
+      } else {
+        continue
+      }
+
       if (!stepText.trim()) {
         throw new Error("STEP file is empty")
       }
@@ -85,7 +105,8 @@ export async function mergeExternalStepModels(
       }
       solids.push(...componentSolids)
     } catch (error) {
-      console.warn(`Failed to merge STEP model from ${stepUrl}:`, error)
+      const source = component.model_step_url ?? "(inline content)"
+      console.warn(`Failed to merge STEP model from ${source}:`, error)
     }
   }
 

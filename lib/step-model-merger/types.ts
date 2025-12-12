@@ -6,6 +6,11 @@ export type CadComponent = {
   cad_component_id?: string
   pcb_component_id?: string
   model_step_url?: string
+  /**
+   * STEP file content as a string. If provided, this takes precedence over model_step_url.
+   * Use this to provide pre-loaded STEP content instead of requiring file system access.
+   */
+  model_step_content?: string
   position?: { x?: number; y?: number; z?: number }
   rotation?: { x?: number; y?: number; z?: number }
 }

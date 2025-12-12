@@ -11,6 +11,7 @@ type CadComponentJson = {
   type: string
   position?: { x?: number; y?: number }
   model_step_url?: string
+  model_step_content?: string
 }
 
 const EXPECTED_COMPONENT_CENTERS = (circuitJson as CadComponentJson[])
@@ -27,6 +28,37 @@ const fixturesDir = fileURLToPath(
 async function loadStepFixture(name: string) {
   const filePath = join(fixturesDir, name)
   return await Bun.file(filePath).text()
+}
+
+/**
+ * Pre-loads STEP file content for all cad_components in the circuit JSON.
+ * Since the lib cannot use Node.js file system APIs, we must pre-load the content in tests.
+ */
+async function preloadStepContent(circuit: CadComponentJson[]): Promise<CadComponentJson[]> {
+  const stepContentCache = new Map<string, string>()
+  
+  // Pre-load all unique STEP files
+  for (const item of circuit) {
+    if (item.type === "cad_component" && item.model_step_url && !item.model_step_content) {
+      if (!stepContentCache.has(item.model_step_url)) {
+        // Extract filename from path
+        const fileName = item.model_step_url.split("/").pop()!
+        const content = await loadStepFixture(fileName)
+        stepContentCache.set(item.model_step_url, content)
+      }
+    }
+  }
+  
+  // Map the circuit JSON to include model_step_content
+  return circuit.map((item) => {
+    if (item.type === "cad_component" && item.model_step_url) {
+      const content = stepContentCache.get(item.model_step_url)
+      if (content) {
+        return { ...item, model_step_content: content }
+      }
+    }
+    return item
+  })
 }
 
 type Bounds = {
@@ -90,7 +122,10 @@ test("kicad-step: switch fixture renders consistently", async () => {
 }, 30000)
 
 test("kicad-step: merges KiCad STEP models referenced via model_step_url", async () => {
-  const stepText = await circuitJsonToStep(circuitJson as any, {
+  // Pre-load STEP content since lib cannot access file system
+  const circuitWithContent = await preloadStepContent(circuitJson as CadComponentJson[])
+  
+  const stepText = await circuitJsonToStep(circuitWithContent as any, {
     includeComponents: true,
     includeExternalMeshes: true,
     productName: "KiCadStepMerge",
