@@ -524,21 +524,54 @@ export async function circuitJsonToStep(
   }
 
   // Generate component mesh fallback if requested
-  // Only call mesh generation if there are cad_components without model_step_url
+  // Only call mesh generation if there are components that need it
   if (options.includeComponents) {
-    // Check if there are any cad_components that need mesh generation (no model_step_url)
-    const hasComponentsNeedingMesh = circuitJson.some((item) => {
-      if (item.type !== "cad_component") return false
-      // Skip if already handled by STEP merging
+    // Build set of pcb_component_ids covered by cad_components with model_step_url
+    const pcbIdsCoveredByStepUrl = new Set<string>()
+    for (const item of circuitJson) {
       if (
-        item.cad_component_id &&
-        handledComponentIds.has(item.cad_component_id)
+        item.type === "cad_component" &&
+        item.model_step_url &&
+        item.pcb_component_id
       ) {
-        return false
+        pcbIdsCoveredByStepUrl.add(item.pcb_component_id)
       }
-      // Only need mesh generation if there's NO model_step_url
-      // If model_step_url exists but merge failed, we don't fallback to mesh
-      return !item.model_step_url
+    }
+
+    // Check if mesh generation is needed:
+    // 1. cad_component without model_step_url (not already handled)
+    // 2. pcb_component without corresponding cad_component with model_step_url
+    const hasComponentsNeedingMesh = circuitJson.some((item) => {
+      if (item.type === "cad_component") {
+        // Skip if already handled by STEP merging
+        if (
+          item.cad_component_id &&
+          handledComponentIds.has(item.cad_component_id)
+        ) {
+          return false
+        }
+        // Needs mesh if no model_step_url
+        return !item.model_step_url
+      }
+      if (item.type === "pcb_component") {
+        // Skip if already handled
+        if (
+          item.pcb_component_id &&
+          handledPcbComponentIds.has(item.pcb_component_id)
+        ) {
+          return false
+        }
+        // Skip if covered by a cad_component with model_step_url
+        if (
+          item.pcb_component_id &&
+          pcbIdsCoveredByStepUrl.has(item.pcb_component_id)
+        ) {
+          return false
+        }
+        // This pcb_component needs mesh generation
+        return true
+      }
+      return false
     })
 
     if (hasComponentsNeedingMesh) {
