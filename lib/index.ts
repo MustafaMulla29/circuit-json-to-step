@@ -524,40 +524,24 @@ export async function circuitJsonToStep(
   }
 
   // Generate component mesh fallback if requested
-  // Only call mesh generation if there are components that weren't handled by STEP merging
+  // Only call mesh generation if there are cad_components without model_step_url
   if (options.includeComponents) {
-    // Check if there are any cad_components without model_step_url that need mesh generation
-    const hasUnhandledComponents = circuitJson.some((item) => {
-      if (item.type === "cad_component") {
-        // Skip if already handled by STEP merging
-        if (
-          item.cad_component_id &&
-          handledComponentIds.has(item.cad_component_id)
-        ) {
-          return false
-        }
-        // Skip if it has model_step_url (should have been handled, or will fail anyway)
-        if (item.model_step_url) {
-          return false
-        }
-        // This component needs mesh generation
-        return true
+    // Check if there are any cad_components that need mesh generation (no model_step_url)
+    const hasComponentsNeedingMesh = circuitJson.some((item) => {
+      if (item.type !== "cad_component") return false
+      // Skip if already handled by STEP merging
+      if (
+        item.cad_component_id &&
+        handledComponentIds.has(item.cad_component_id)
+      ) {
+        return false
       }
-      if (item.type === "pcb_component") {
-        // Skip if already handled
-        if (
-          item.pcb_component_id &&
-          handledPcbComponentIds.has(item.pcb_component_id)
-        ) {
-          return false
-        }
-        // pcb_components without corresponding handled cad_component need mesh generation
-        return true
-      }
-      return false
+      // Only need mesh generation if there's NO model_step_url
+      // If model_step_url exists but merge failed, we don't fallback to mesh
+      return !item.model_step_url
     })
 
-    if (hasUnhandledComponents) {
+    if (hasComponentsNeedingMesh) {
       const componentSolids = await generateComponentMeshes({
         repo,
         circuitJson,
