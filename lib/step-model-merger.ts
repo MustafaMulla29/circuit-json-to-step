@@ -85,7 +85,9 @@ export async function mergeExternalStepModels(
       }
       solids.push(...componentSolids)
     } catch (error) {
-      console.warn(`Failed to merge STEP model from ${stepUrl}:`, error)
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
+      console.warn(`Failed to merge STEP model from ${stepUrl}: ${errorMessage}`)
     }
   }
 

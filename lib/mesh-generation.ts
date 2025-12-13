@@ -353,7 +353,8 @@ export async function generateComponentMeshes(
       solids.push(componentSolid)
     }
   } catch (error) {
-    console.warn("Failed to generate component mesh:", error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.warn(`Failed to generate component mesh: ${errorMessage}`)
     // Continue without components if generation fails
   }
 
